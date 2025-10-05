@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Calculator</title>
+    <style>
+        :root {
+            --bg-dark: #1a1a1a;
+            --bg-button: #2d2d2d;
+            --bg-operator: #4d4d4d;
+            --bg-equals: #5c7cfa;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --button-hover: brightness(1.2);
+            --button-active: brightness(0.8);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 1rem;
+        }
+
+        .calculator {
+            width: 100%;
+            max-width: 360px;
+            background: var(--bg-dark);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0,0,0,0.3);
+        }
+
+        .display {
+            padding: 1.5rem;
+            text-align: right;
+            background: var(--bg-dark);
+        }
+
+        .history {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            min-height: 1.5em;
+            margin-bottom: 0.5rem;
+        }
+
+        .current {
+            font-size: 2.5rem;
+            font-weight: 300;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: #111;
+            padding: 1px;
+        }
+
+        button {
+            border: none;
+            padding: 1.25rem;
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            background: var(--bg-button);
+            cursor: pointer;
+            transition: filter 0.15s;
+        }
+
+        button:hover {
+            filter: var(--button-hover);
+        }
+
+        button:active {
+            filter: var(--button-active);
+        }
+
+        button:focus-visible {
+            outline: 2px solid var(--bg-equals);
+            outline-offset: -2px;
+            z-index: 1;
+        }
+
+        .operator {
+            background: var(--bg-operator);
+        }
+
+        .equals {
+            background: var(--bg-equals);
+        }
+
+        @media (max-width: 360px) {
+            .calculator {
+                border-radius: 0;
+            }
+            
+            button {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator">
+        <div class="display" role="region" aria-live="polite">
+            <div class="history" aria-label="Calculation history"></div>
+            <div class="current" aria-label="Result">0</div>
+        </div>
+        <div class="buttons">
+            <button onclick="clearAll()" aria-label="Clear">C</button>
+            <button onclick="backspace()" aria-label="Backspace">⌫</button>
+            <button onclick="toggleSign()" aria-label="Toggle positive negative">±</button>
+            <button onclick="chooseOperator('/')" class="operator" aria-label="Divide">÷</button>
+            
+            <button onclick="appendDigit('7')" aria-label="Seven">7</button>
+            <button onclick="appendDigit('8')" aria-label="Eight">8</button>
+            <button onclick="appendDigit('9')" aria-label="Nine">9</button>
+            <button onclick="chooseOperator('*')" class="operator" aria-label="Multiply">×</button>
+            
+            <button onclick="appendDigit('4')" aria-label="Four">4</button>
+            <button onclick="appendDigit('5')" aria-label="Five">5</button>
+            <button onclick="appendDigit('6')" aria-label="Six">6</button>
+            <button onclick="chooseOperator('-')" class="operator" aria-label="Subtract">−</button>
+            
+            <button onclick="appendDigit('1')" aria-label="One">1</button>
+            <button onclick="appendDigit('2')" aria-label="Two">2</button>
+            <button onclick="appendDigit('3')" aria-label="Three">3</button>
+            <button onclick="chooseOperator('+')" class="operator" aria-label="Add">+</button>
+            
+            <button onclick="appendDigit('0')" aria-label="Zero">0</button>
+            <button onclick="appendDigit('.')" aria-label="Decimal point">.</button>
+            <button onclick="evaluate()" class="equals" aria-label="Equals" style="grid-column: span 2">=</button>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let currentValue = '0';
+        let previousValue = '';
+        let operator = '';
+        let shouldResetDisplay = false;
+
+        // DOM elements
+        const currentDisplay = document.querySelector('.current');
+        const historyDisplay = document.querySelector('.history');
+
+        // Format number removing trailing zeros after decimal
+        function formatNumber(num) {
+            if (typeof num !== 'number') return num;
+            const formatted = Number(num).toString();
+            if (formatted.length > 12) {
+                return Number(num).toExponential(8);
+            }
+            return formatted;
+        }
+
+        // Safely evaluate arithmetic expressions
+        function calculate(a, b, op) {
+            const x = parseFloat(a);
+            const y = parseFloat(b);
+            
+            if (isNaN(x) || isNaN(y)) {
+                return 'Error';
+            }
+            
+            switch(op) {
+                case '+': return x + y;
+                case '-': return x - y;
+                case '*': return x * y;
+                case '/': 
+                    if (y === 0) {
+                        return 'Cannot divide by zero';
+                    }
+                    return x / y;
+                default: return b;
+            }
+        }
+
+        // Update displays
+        function updateDisplay() {
+            currentDisplay.textContent = currentValue;
+            historyDisplay.textContent = previousValue + (operator ? ` ${operator.replace('*', '×').replace('/', '÷')} ` : '');
+        }
+
+        // Handle digit input
+        function appendDigit(digit) {
+            if (currentValue === 'Error') {
+                clearAll();
+            }
+            
+            if (shouldResetDisplay) {
+                currentValue = '';
+                shouldResetDisplay = false;
+            }
+
+            if (digit === '.' && currentValue.includes('.')) {
+                return;
+            }
+
+            if (currentValue === '0' && digit !== '.') {
+                currentValue = '';
+            }
+
+            currentValue += digit;
+            updateDisplay();
+        }
+
+        // Handle operator selection
+        function chooseOperator(op) {
+            if (currentValue === 'Error') {
+                return;
+            }
+
+            if (operator && !shouldResetDisplay) {
+                evaluate();
+            }
+
+            previousValue = currentValue;
+            operator = op;
+            shouldResetDisplay = true;
+            updateDisplay();
+        }
+
+        // Evaluate expression
+        function evaluate() {
+            if (currentValue === 'Error') {
+                return;
+            }
+
+            if (!operator) {
+                previousValue = `${formatNumber(currentValue)} =`;
+                shouldResetDisplay = true;
+                updateDisplay();
+                return;
+            }
+
+            if (shouldResetDisplay) {
+                return;
+            }
+
+            const result = calculate(previousValue, currentValue, operator);
+            previousValue = `${formatNumber(previousValue)} ${operator.replace('*', '×').replace('/', '÷')} ${formatNumber(currentValue)} =`;
+            currentValue = typeof result === 'number' ? formatNumber(result) : result;
+            operator = '';
+            shouldResetDisplay = true;
+            updateDisplay();
+        }
+
+        // Clear calculator
+        function clearAll() {
+            currentValue = '0';
+            previousValue = '';
+            operator = '';
+            shouldResetDisplay = false;
+            updateDisplay();
+        }
+
+        // Remove last digit
+        function backspace() {
+            if (shouldResetDisplay || currentValue === 'Error') {
+                return;
+            }
+            currentValue = currentValue.slice(0, -1) || '0';
+            updateDisplay();
+        }
+
+        // Toggle positive/negative
+        function toggleSign() {
+            if (currentValue === 'Error' || currentValue === '0') {
+                return;
+            }
+            currentValue = currentValue.startsWith('-') ? 
+                currentValue.slice(1) : '-' + currentValue;
+            updateDisplay();
+        }
+
+        // Add keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9' || e.key === '.') {
+                appendDigit(e.key);
+            } else if (['+', '-', '*', '/'].includes(e.key)) {
+                chooseOperator(e.key);
+            } else if (e.key === 'Enter' || e.key === '=') {
+                evaluate();
+            } else if (e.key === 'Escape') {
+                clearAll();
+            } else if (e.key === 'Backspace') {
+                backspace();
+            }
+        });
+    </script>
+</body>
+</html>
